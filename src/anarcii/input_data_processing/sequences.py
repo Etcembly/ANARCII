@@ -9,6 +9,8 @@ from anarcii.input_data_processing.tokeniser import Tokeniser
 
 from .utils import pick_windows, split_seq
 
+SHORT_SEQ_MAX_LENGTH = 200  # residues.
+
 # A regex pattern to match no more than 200 residues, containing a 'CWC' pattern
 # (cysteine followed by 5–25 residues followed by a tryptophan followed by 50–80
 # residues followed by another cysteine) starting no later than the 41st residue. The
@@ -99,7 +101,11 @@ class SequenceProcessor:
 
     def _handle_long_sequences(self):
         n_jump = 3
-        long_seqs = {key: seq for key, seq in self.seqs.items() if len(seq) > 200}
+        long_seqs = {
+            key: seq
+            for key, seq in self.seqs.items()
+            if len(seq) > SHORT_SEQ_MAX_LENGTH
+        }
 
         if long_seqs and self.verbose:
             print(
@@ -164,14 +170,8 @@ class SequenceProcessor:
                     data = data[start_idx + SHIFT :]
                     last_start += start_idx + SHIFT
 
-                    continue
-
-                # Found windows >>> modify the seqs dict (still works for non SCFVs)
-                # Remove the original key if it already exists
+                # Get the original sequence.
                 seq = self.seqs[key]
-
-                self.offsets.pop(key, None)
-                self.seqs.pop(key, None)
 
                 ### NOW LOOK FOR PEAKS (> threshold & within 50 residues of minima).
                 offset = 0
@@ -207,8 +207,15 @@ class SequenceProcessor:
                                 )  # increment by 180 aa
                             ]
 
+                        # Found window > modify seqs dict (works for non SCFVs)
+                        # Remove the original key if it already exists
+                        # None ensures no error.
+                        self.offsets.pop(key, None)
+                        self.seqs.pop(key, None)
+
                         self.offsets[new_key] = peak_idx_plus2 * SCFV_JUMP
                         self.seqs[new_key] = window
+
                         if self.verbose:
                             print(
                                 f"Identified potential domain. Renamed to: {new_key}\n",
@@ -216,6 +223,13 @@ class SequenceProcessor:
                             )
                         idx += 1
                         found += 1
+
+                        # Fix for exact repetition of duplicate sequences.
+                        # Set all analysed probs to zero to avoid re-detection.
+                        for j in range(0, peak_idx_plus2 + 1):
+                            if j < len(probs):
+                                probs[j] = 0
+
                 if self.verbose:
                     print("")
 
@@ -223,6 +237,11 @@ class SequenceProcessor:
                     print(f"Only found 1 domain for {key}.\n")
                 elif found == 0:
                     print(f"Failed to find any domain for {key}.\n")
+                    # The sequence will not be broken up - just remove
+                    # This ensures it is not processed further.
+                    self.offsets[key] = 0
+                    self.seqs[key] = ""
+
                 elif found > 2:
                     print(f"Found more than 2 domains for {key}.\n")
 

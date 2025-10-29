@@ -188,6 +188,7 @@ class Anarcii:
 
         for i, chunk in enumerate(batched(seqs.items(), self.max_seqs_len), 1):
             chunk = dict(chunk)
+            original_keys = list(chunk)
 
             if self.verbose:
                 print(f"Processing chunk {i} of {n_chunks}.")
@@ -211,7 +212,22 @@ class Anarcii:
                 numbered = self.number_with_type(chunk, self.seq_type, scfv)
 
             # Restore the original input order to the numbered sequences.
-            numbered = {key: numbered[key] for key in chunk}
+            # If SCFV has been run then the keys will have been modified to
+            # include the suffix, so we cannot do this.
+            if not scfv:
+                numbered = {key: numbered[key] for key in original_keys}
+            else:
+                old_key_to_new_keys = {key: [] for key in original_keys}
+                for new_key in numbered:
+                    old_key, _ = new_key.rsplit("-", maxsplit=1)
+                    old_key_to_new_keys[old_key].append(new_key)
+
+                # For each old key, sort the new keys (this should be redundant).
+                ordered_new_keys = chain.from_iterable(
+                    map(sorted, old_key_to_new_keys.values())
+                )
+                # Now reorder the numbered dict.
+                numbered = {key: numbered[key] for key in ordered_new_keys}
 
             # If the sequences came from a PDB(x) file, renumber them in the associated
             # data structure.
