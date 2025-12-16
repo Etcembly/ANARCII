@@ -212,8 +212,13 @@ class SequenceProcessor:
                         # None ensures no error.
                         self.offsets.pop(key, None)
                         self.seqs.pop(key, None)
-
-                        self.offsets[new_key] = peak_idx_plus2 * SCFV_JUMP
+                        
+                        # For first window we are looking from the start of the sequence.
+                        if i==0:
+                            self.offsets[new_key] = 0
+                        else:
+                            self.offsets[new_key] = peak_idx_plus2 * SCFV_JUMP
+                        
                         self.seqs[new_key] = window
 
                         if self.verbose:
